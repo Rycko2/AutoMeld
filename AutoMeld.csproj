@@ -1,0 +1,13 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <AssemblyName>AutoMeld</AssemblyName>
+    <RootNamespace>AutoMeld</RootNamespace>
+    <Version>0.1.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="AutoMeld.json" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+</Project>
