@@ -5,7 +5,6 @@ namespace AutoMeld;
 public sealed class Configuration
 {
     public bool ConfirmBeforeStarting { get; set; } = true;
-    public string LastImportPath { get; set; } = string.Empty;
 
     public static Configuration Load(string directory)
     {

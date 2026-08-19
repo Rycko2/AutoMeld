@@ -10,4 +10,9 @@
   <ItemGroup>
     <None Update="AutoMeld.json" CopyToOutputDirectory="Always" />
   </ItemGroup>
+
+  <Target Name="DeployLocal" AfterTargets="Build" Condition="'$(LOCAL_PLUGIN_PATH)' != ''">
+    <MakeDir Directories="$(LOCAL_PLUGIN_PATH)" />
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)AutoMeld.json" DestinationFolder="$(LOCAL_PLUGIN_PATH)" />
+  </Target>
 </Project>

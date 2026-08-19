@@ -21,6 +21,8 @@ public sealed class MateriaEntry
     [JsonPropertyName("locked")] public bool Locked { get; set; }
 }
 
+public sealed record EquippedItemSnapshot(uint ItemId, IReadOnlyList<uint> MateriaIds);
+
 public sealed record MeldStep(string Slot, uint ItemId, int SlotIndex, uint MateriaId);
 
 public sealed record GearMismatch(string Slot, uint? ExpectedItemId, uint? ActualItemId)
