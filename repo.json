@@ -7,9 +7,9 @@
     "InternalName": "AutoMeld",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Rycko2/AutoMeld",
-    "AssemblyVersion": "0.1.0",
+    "AssemblyVersion": "0.1.1",
     "DalamudApiLevel": "15",
-    "DownloadLinkInstall": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.0/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.0/latest.zip"
+    "DownloadLinkInstall": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.1/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.1/latest.zip"
   }
 ]
