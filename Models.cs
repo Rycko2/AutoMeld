@@ -42,16 +42,58 @@ public sealed class GearValidationResult
 
 public static class GearPlan
 {
+    public static IReadOnlyList<uint> DesiredMateria(GearItem item) => item.Materia
+        .Where(materia => !materia.Locked && materia.Id != 0)
+        .Select(materia => materia.Id)
+        .ToArray();
+
+    public static bool SupportsMateria(GearItem item) => item.Materia.Count > 0;
+
+    public static int PreservedMateriaCount(GearItem desired, EquippedItemSnapshot current)
+    {
+        var currentMateria = current.MateriaIds
+            .Where(materiaId => materiaId != 0)
+            .ToArray();
+        var desiredMateria = DesiredMateria(desired);
+        var preservedCount = 0;
+
+        while (preservedCount < currentMateria.Length
+            && preservedCount < desiredMateria.Count
+            && currentMateria[preservedCount] == desiredMateria[preservedCount])
+        {
+            preservedCount++;
+        }
+
+        return preservedCount;
+    }
+
+    public static bool NeedsMateriaChange(GearItem desired, EquippedItemSnapshot current)
+    {
+        if (!SupportsMateria(desired))
+            return false;
+
+        var desiredMateria = DesiredMateria(desired);
+        if (desiredMateria.Count == 0)
+            return false;
+
+        return !current.MateriaIds
+            .Where(materiaId => materiaId != 0)
+            .OrderBy(materiaId => materiaId)
+            .SequenceEqual(desiredMateria.OrderBy(materiaId => materiaId));
+    }
+
     public static IReadOnlyList<MeldStep> Build(GearExport export)
     {
         var steps = new List<MeldStep>();
         foreach (var (slot, item) in export.Items)
         {
-            for (var index = 0; index < item.Materia.Count; index++)
+            if (!SupportsMateria(item))
+                continue;
+
+            var desiredMateria = DesiredMateria(item);
+            for (var index = 0; index < desiredMateria.Count; index++)
             {
-                var materia = item.Materia[index];
-                if (!materia.Locked && materia.Id != 0)
-                    steps.Add(new MeldStep(slot, item.Id, index, materia.Id));
+                steps.Add(new MeldStep(slot, item.Id, index, desiredMateria[index]));
             }
         }
 

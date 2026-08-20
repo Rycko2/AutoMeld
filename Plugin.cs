@@ -1,5 +1,6 @@
 using Dalamud.Interface.Windowing;
 using Dalamud.Game.Command;
+using Dalamud.Game.Inventory;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Bindings.ImGui;
@@ -17,6 +18,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ICommandManager commands;
     private readonly IPluginLog log;
     private readonly IDataManager dataManager;
+    private readonly IGameInventory inventory;
     private readonly WindowSystem windows = new("AutoMeld");
     private readonly MeldWorkflow workflow;
     private readonly IEquipmentReader equipmentReader;
@@ -26,6 +28,7 @@ public sealed class Plugin : IDalamudPlugin
     private string jsonText = string.Empty;
     private GearValidationResult? previewValidation;
     private IReadOnlyDictionary<string, EquippedItemSnapshot>? previewEquippedItems;
+    private string? previewMateriaError;
     private string status = "Import a xivgear JSON export to begin.";
 
     public string Name => "AutoMeld";
@@ -37,6 +40,7 @@ public sealed class Plugin : IDalamudPlugin
         this.chat = chat;
         this.log = log;
         this.dataManager = dataManager;
+        this.inventory = inventory;
         workflow = new MeldWorkflow(framework, condition, log);
         equipmentReader = new DalamudEquipmentReader(inventory, dataManager, log);
         configDirectory = pluginInterface.GetPluginConfigDirectory();
@@ -83,24 +87,12 @@ public sealed class Plugin : IDalamudPlugin
         return "Unknown item";
     }
 
-    private string MismatchDisplay(GearMismatch mismatch)
-    {
-        var expected = mismatch.ExpectedItemId is uint expectedId ? ItemDisplay(expectedId) : "no item expected";
-        var actual = mismatch.ActualItemId is uint actualId ? ItemDisplay(actualId) : "nothing equipped";
-        return $"{mismatch.Slot}: expected {expected}; found {actual}";
-    }
-
-    private static uint[] DesiredMateria(GearItem item) => item.Materia
-        .Where(materia => !materia.Locked && materia.Id != 0)
-        .Select(materia => materia.Id)
-        .ToArray();
-
     private bool NeedsMateriaChange(string slot, GearItem desired)
     {
         if (previewEquippedItems is null || !previewEquippedItems.TryGetValue(slot, out var current))
             return false;
 
-        return !current.MateriaIds.SequenceEqual(DesiredMateria(desired));
+        return GearPlan.NeedsMateriaChange(desired, current);
     }
 
     private string MateriaDisplay(IEnumerable<uint> materiaIds)
@@ -117,9 +109,11 @@ public sealed class Plugin : IDalamudPlugin
             export = GearPlan.Parse(jsonText);
             previewValidation = null;
             previewEquippedItems = null;
+            previewMateriaError = null;
             var steps = GearPlan.Build(export);
             status = $"Loaded {export.Name}: {steps.Count} materia steps.";
             log.Information("Imported export {ExportName}: {ItemCount} gear slots and {StepCount} materia steps.", export.Name, export.Items.Count, steps.Count);
+            VerifyCurrentGear();
         }
         catch (System.Text.Json.JsonException exception)
         {
@@ -142,6 +136,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             previewValidation = null;
             previewEquippedItems = null;
+            previewMateriaError = null;
             status = readerError;
             log.Warning("Gear verification failed because equipped gear could not be read: {Reason}", readerError);
             return;
@@ -149,9 +144,14 @@ public sealed class Plugin : IDalamudPlugin
 
         previewEquippedItems = equippedItems;
         previewValidation = GearPlan.Validate(export, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
-        status = previewValidation.IsMatch
-            ? "Gear verification passed. No gear has been changed."
-            : "Gear verification failed. No gear has been changed.";
+        previewMateriaError = previewValidation.IsMatch
+            ? FindMissingMateria(export, equippedItems)
+            : null;
+        status = !previewValidation.IsMatch
+            ? "Gear verification failed. No gear has been changed."
+            : previewMateriaError is null
+                ? "Gear verification passed. No gear has been changed."
+                : previewMateriaError;
         log.Information("Gear verification preview completed. Match: {IsMatch}; mismatches: {MismatchCount}.", previewValidation.IsMatch, previewValidation.Mismatches.Count);
     }
 
@@ -182,6 +182,23 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             }
 
+            var currentValidation = GearPlan.Validate(export, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
+            if (!currentValidation.IsMatch)
+            {
+                status = "Current gear no longer matches the plan. Verify again before starting.";
+                chat.PrintError($"[AutoMeld] {status}");
+                return;
+            }
+
+            var materiaError = FindMissingMateria(export, equippedItems);
+            if (materiaError is not null)
+            {
+                status = materiaError;
+                chat.PrintError($"[AutoMeld] {status}");
+                log.Warning("Meld start stopped because required materia is unavailable: {Reason}", status);
+                return;
+            }
+
             workflow.Start(export, equippedItems);
             status = workflow.Status;
         }
@@ -197,6 +214,48 @@ public sealed class Plugin : IDalamudPlugin
             chat.PrintError($"[AutoMeld] {status}");
             log.Error(exception, "Unexpected error while starting the meld workflow.");
         }
+    }
+
+    private string? FindMissingMateria(GearExport desiredPlan, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems)
+    {
+        var required = new Dictionary<uint, long>();
+        foreach (var (slot, item) in desiredPlan.Items)
+        {
+            if (!equippedItems.TryGetValue(slot, out var current) || !GearPlan.NeedsMateriaChange(item, current))
+                continue;
+
+            var desiredMateria = GearPlan.DesiredMateria(item);
+            var preservedCount = GearPlan.PreservedMateriaCount(item, current);
+            foreach (var materiaId in desiredMateria.Skip(preservedCount))
+                required[materiaId] = required.GetValueOrDefault(materiaId) + 1;
+        }
+
+        var available = new Dictionary<uint, long>();
+        foreach (var inventoryType in new[]
+        {
+            GameInventoryType.Inventory1,
+            GameInventoryType.Inventory2,
+            GameInventoryType.Inventory3,
+            GameInventoryType.Inventory4,
+        })
+        {
+            foreach (var item in inventory.GetInventoryItems(inventoryType))
+            {
+                if (item.ItemId == 0)
+                    continue;
+
+                available[item.ItemId] = available.GetValueOrDefault(item.ItemId) + item.Quantity;
+            }
+        }
+
+        var missing = required
+            .Where(pair => available.GetValueOrDefault(pair.Key) < pair.Value)
+            .Select(pair => $"{ItemDisplay(pair.Key)}: need {pair.Value}, have {available.GetValueOrDefault(pair.Key)}")
+            .ToArray();
+        if (missing.Length == 0)
+            return null;
+
+        return $"Materia verification failed. Missing: {string.Join(", ", missing)}";
     }
 
     private sealed class AutoMeldWindow : Window
@@ -219,7 +278,7 @@ public sealed class Plugin : IDalamudPlugin
                 var changedSlots = plugin.previewEquippedItems is null
                     ? new List<KeyValuePair<string, GearItem>>()
                     : plugin.export.Items.Where(pair => plugin.NeedsMateriaChange(pair.Key, pair.Value)).ToList();
-                var changeCount = changedSlots.Sum(pair => DesiredMateria(pair.Value).Length);
+                var changeCount = changedSlots.Sum(pair => GearPlan.DesiredMateria(pair.Value).Count);
                 ImGui.Separator();
                 ImGui.Text($"{plugin.export.Name}  |  {changeCount} materia changes");
                 if (plugin.previewEquippedItems is null)
@@ -229,25 +288,35 @@ public sealed class Plugin : IDalamudPlugin
                     foreach (var (slot, item) in changedSlots)
                     {
                         var current = plugin.previewEquippedItems?.GetValueOrDefault(slot);
-                        var currentText = plugin.previewEquippedItems is null
-                            ? "not verified"
-                            : $"current materia: {plugin.MateriaDisplay(current?.MateriaIds ?? Array.Empty<uint>())}";
-                        ImGui.BulletText($"{slot}: {plugin.ItemDisplay(item.Id)}; {currentText}; planned materia: {plugin.MateriaDisplay(DesiredMateria(item))}");
+                        ImGui.Text(slot);
+                        ImGui.Indent();
+                        ImGui.Text($"current: {plugin.MateriaDisplay(current?.MateriaIds ?? Array.Empty<uint>())}");
+                        ImGui.Text($"planned: {plugin.MateriaDisplay(GearPlan.DesiredMateria(item))}");
+                        ImGui.Unindent();
                     }
                     ImGui.EndChild();
                 }
 
                 if (plugin.previewValidation is { IsMatch: false } validation)
                 {
-                    ImGui.TextWrapped($"Gear verification failed: {string.Join("; ", validation.Mismatches.Select(plugin.MismatchDisplay))}");
+                    ImGui.Text("Gear verification failed:");
+                    foreach (var mismatch in validation.Mismatches)
+                    {
+                        ImGui.Text(mismatch.Slot);
+                        ImGui.Indent();
+                        ImGui.Text($"current: {(mismatch.ActualItemId is uint actualId ? plugin.ItemDisplay(actualId) : "nothing equipped")}");
+                        ImGui.Text($"planned: {(mismatch.ExpectedItemId is uint expectedId ? plugin.ItemDisplay(expectedId) : "no item expected")}");
+                        ImGui.Unindent();
+                    }
                 }
                 else if (plugin.previewValidation?.IsMatch == true)
                 {
                     ImGui.Text("Gear verification passed. The current equipped item IDs match the pasted plan.");
                 }
 
-                if (ImGui.Button("Verify current gear")) plugin.VerifyCurrentGear();
-                ImGui.SameLine();
+                if (plugin.previewMateriaError is not null)
+                    ImGui.TextWrapped(plugin.previewMateriaError);
+
                 if (ImGui.Button("Start automatic meld")) plugin.Start();
                 ImGui.SameLine();
                 if (ImGui.Button("Stop")) plugin.workflow.Stop();

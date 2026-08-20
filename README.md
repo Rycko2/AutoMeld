@@ -43,8 +43,8 @@ If the plugin does not appear, confirm that `AutoMeld.dll` and `AutoMeld.json` a
 1. Copy the JSON text from a xivgear export.
 2. Run `/xlautomeld`.
 3. Paste the export into **xivgear JSON**.
-4. Select **Load pasted JSON**.
-5. Select **Verify current gear** and review the expected and current item IDs plus planned materia.
+4. Select **Load pasted JSON**. Gear verification runs automatically.
+5. Review the current and planned gear and materia summary.
 6. Select **Start automatic meld** only after the summary is correct.
 
 AutoMeld reads only currently equipped gear. It does not use the armory chest or normal inventory. A missing or mismatched item ID stops the operation before any gear is changed.

@@ -121,7 +121,7 @@ public sealed class MeldWorkflow : IMeldDriver
         cancellation = new CancellationTokenSource();
         Status = $"Starting: {steps.Count} materia operations.";
         log.Information("Starting meld workflow for {ExportName}: {StepCount} materia operations.", export.Name, steps.Count);
-        _ = framework.Run(() => Execute(export), cancellation.Token);
+        _ = framework.Run(() => Execute(export, equippedItems), cancellation.Token);
     }
 
     public void Stop()
@@ -134,7 +134,7 @@ public sealed class MeldWorkflow : IMeldDriver
         Status = "Stopped.";
     }
 
-    private async Task Execute(GearExport export)
+    private async Task Execute(GearExport export, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems)
     {
         try
         {
@@ -144,7 +144,10 @@ public sealed class MeldWorkflow : IMeldDriver
             foreach (var (slot, desired) in export.Items)
             {
                 cancellation!.Token.ThrowIfCancellationRequested();
-                await MeldItem(slot, desired, cancellation.Token);
+                if (!equippedItems.TryGetValue(slot, out var current) || !GearPlan.NeedsMateriaChange(desired, current))
+                    continue;
+
+                await MeldItem(slot, desired, current, cancellation.Token);
             }
 
             Status = "Complete.";
@@ -167,27 +170,25 @@ public sealed class MeldWorkflow : IMeldDriver
         }
     }
 
-    private async Task MeldItem(string slot, GearItem desired, CancellationToken token)
+    private async Task MeldItem(string slot, GearItem desired, EquippedItemSnapshot current, CancellationToken token)
     {
         var equippedSlot = GetEquippedSlot(slot);
         if (GetEquippedItemId(equippedSlot) != desired.Id)
             throw new InvalidOperationException($"{slot}: equipped item changed before melding. Nothing was changed for this item.");
 
-        var desiredMateria = desired.Materia
-            .Where(materia => !materia.Locked && materia.Id != 0)
-            .Select(materia => materia.Id)
-            .ToArray();
+        var desiredMateria = GearPlan.DesiredMateria(desired);
+        var preservedCount = GearPlan.PreservedMateriaCount(desired, current);
 
-        log.Information("Preparing {Slot}, item {ItemId}: {MateriaCount} requested materia.", slot, desired.Id, desiredMateria.Length);
+        log.Information("Preparing {Slot}, item {ItemId}: preserving {PreservedCount} materia and replacing {MateriaCount} materia.", slot, desired.Id, preservedCount, desiredMateria.Count - preservedCount);
 
-        for (var index = 0; index < desiredMateria.Length; index++)
+        if (GetMateriaCount(equippedSlot) > preservedCount)
+            await RetrieveMateria(equippedSlot, preservedCount, token);
+
+        for (var index = preservedCount; index < desiredMateria.Count; index++)
         {
             token.ThrowIfCancellationRequested();
             if (GetEquippedItemId(equippedSlot) != desired.Id)
                 throw new InvalidOperationException($"{slot}: equipped item changed during melding. Workflow stopped before further changes.");
-
-            if (GetMateriaCount(equippedSlot) > index)
-                await RetrieveMateria(equippedSlot, index, token);
 
             if (GetEquippedItemId(equippedSlot) != desired.Id)
                 throw new InvalidOperationException($"{slot}: equipped item changed after retrieval.");
