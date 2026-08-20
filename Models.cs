@@ -49,6 +49,41 @@ public static class GearPlan
 
     public static bool SupportsMateria(GearItem item) => item.Materia.Count > 0;
 
+    public static bool IsRingSlot(string slot) => slot is "RingLeft" or "RingRight";
+
+    public static IReadOnlyDictionary<string, string> MatchEquippedSlots(
+        GearExport export,
+        IReadOnlyDictionary<string, uint> equippedItems)
+    {
+        var matches = new Dictionary<string, string>();
+        var availableRingSlots = new HashSet<string>(new[] { "RingLeft", "RingRight" });
+
+        foreach (var (slot, desired) in export.Items)
+        {
+            if (IsRingSlot(slot))
+                continue;
+
+            if (equippedItems.TryGetValue(slot, out var actualItemId) && actualItemId == desired.Id)
+                matches[slot] = slot;
+        }
+
+        foreach (var slot in new[] { "RingLeft", "RingRight" })
+        {
+            if (!export.Items.TryGetValue(slot, out var desired))
+                continue;
+
+            var matchingSlot = availableRingSlots.FirstOrDefault(candidate =>
+                equippedItems.TryGetValue(candidate, out var actualItemId) && actualItemId == desired.Id);
+            if (matchingSlot is not null)
+            {
+                matches[slot] = matchingSlot;
+                availableRingSlots.Remove(matchingSlot);
+            }
+        }
+
+        return matches;
+    }
+
     public static int PreservedMateriaCount(GearItem desired, EquippedItemSnapshot current)
     {
         var currentMateria = current.MateriaIds
@@ -105,22 +140,19 @@ public static class GearPlan
         IReadOnlyDictionary<string, uint> equippedItems)
     {
         var mismatches = new List<GearMismatch>();
+        var matches = MatchEquippedSlots(export, equippedItems);
 
         foreach (var (slot, expectedItem) in export.Items)
         {
-            if (!equippedItems.TryGetValue(slot, out var actualItemId))
+            if (!matches.TryGetValue(slot, out var matchedSlot))
             {
-                mismatches.Add(new GearMismatch(slot, expectedItem.Id, null));
-            }
-            else if (actualItemId != expectedItem.Id)
-            {
-                mismatches.Add(new GearMismatch(slot, expectedItem.Id, actualItemId));
+                mismatches.Add(new GearMismatch(slot, expectedItem.Id, equippedItems.GetValueOrDefault(slot) is var actualId && actualId != 0 ? actualId : null));
             }
         }
 
         foreach (var slot in equippedItems.Keys)
         {
-            if (!export.Items.ContainsKey(slot))
+            if (!matches.Values.Contains(slot))
                 mismatches.Add(new GearMismatch(slot, null, equippedItems[slot]));
         }
 

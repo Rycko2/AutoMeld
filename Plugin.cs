@@ -89,7 +89,11 @@ public sealed class Plugin : IDalamudPlugin
 
     private bool NeedsMateriaChange(string slot, GearItem desired)
     {
-        if (previewEquippedItems is null || !previewEquippedItems.TryGetValue(slot, out var current))
+        if (previewEquippedItems is null || export is null)
+            return false;
+
+        var matches = GearPlan.MatchEquippedSlots(export, previewEquippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
+        if (!matches.TryGetValue(slot, out var matchedSlot) || !previewEquippedItems.TryGetValue(matchedSlot, out var current))
             return false;
 
         return GearPlan.NeedsMateriaChange(desired, current);
@@ -219,9 +223,10 @@ public sealed class Plugin : IDalamudPlugin
     private string? FindMissingMateria(GearExport desiredPlan, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems)
     {
         var required = new Dictionary<uint, long>();
+        var matches = GearPlan.MatchEquippedSlots(desiredPlan, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
         foreach (var (slot, item) in desiredPlan.Items)
         {
-            if (!equippedItems.TryGetValue(slot, out var current) || !GearPlan.NeedsMateriaChange(item, current))
+            if (!matches.TryGetValue(slot, out var matchedSlot) || !equippedItems.TryGetValue(matchedSlot, out var current) || !GearPlan.NeedsMateriaChange(item, current))
                 continue;
 
             var desiredMateria = GearPlan.DesiredMateria(item);

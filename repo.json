@@ -1,15 +1,15 @@
 [
   {
-    "Author": "Rycko",
+    "Author": "Rycko2",
     "Name": "AutoMeld",
     "Punchline": "Apply an imported FFXIV materia plan to your equipped gear.",
     "Description": "Imports xivgear exports, validates slot plans, and provides a one-click meld workflow.",
     "InternalName": "AutoMeld",
     "ApplicableVersion": "any",
-    "RepoUrl": "https://github.com/Rycko2/auto-meld",
+    "RepoUrl": "https://github.com/Rycko2/AutoMeld",
     "AssemblyVersion": "0.1.0",
     "DalamudApiLevel": "15",
-    "DownloadLinkInstall": "https://github.com/Rycko2/auto-meld/releases/download/v0.1.0/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/Rycko2/auto-meld/releases/download/v0.1.0/latest.zip"
+    "DownloadLinkInstall": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.0/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/Rycko2/AutoMeld/releases/download/v0.1.0/latest.zip"
   }
 ]

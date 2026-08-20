@@ -67,9 +67,7 @@ jobs:
           $entry = $repo[0]
           $entry.AssemblyVersion = $version
           $entry.DownloadLinkInstall = $link
-          $entry.DownloadLinkTesting = $link
           $entry.DownloadLinkUpdate = $link
-          $entry.LastUpdate = [string][long](Get-Date -UFormat %s)
           $repo | ConvertTo-Json -Depth 10 -AsArray | Set-Content repo.json -Encoding UTF8
 
       - name: Commit updated repo.json

@@ -141,13 +141,16 @@ public sealed class MeldWorkflow : IMeldDriver
             if (condition[ConditionFlag.MeldingMateria] || condition[ConditionFlag.Occupied39])
                 throw new InvalidOperationException("The player is already busy with a materia action.");
 
+            var slotMatches = GearPlan.MatchEquippedSlots(export, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
             foreach (var (slot, desired) in export.Items)
             {
                 cancellation!.Token.ThrowIfCancellationRequested();
-                if (!equippedItems.TryGetValue(slot, out var current) || !GearPlan.NeedsMateriaChange(desired, current))
+                if (!slotMatches.TryGetValue(slot, out var equippedSlot)
+                    || !equippedItems.TryGetValue(equippedSlot, out var current)
+                    || !GearPlan.NeedsMateriaChange(desired, current))
                     continue;
 
-                await MeldItem(slot, desired, current, cancellation.Token);
+                await MeldItem(slot, equippedSlot, desired, current, cancellation.Token);
             }
 
             Status = "Complete.";
@@ -170,16 +173,16 @@ public sealed class MeldWorkflow : IMeldDriver
         }
     }
 
-    private async Task MeldItem(string slot, GearItem desired, EquippedItemSnapshot current, CancellationToken token)
+    private async Task MeldItem(string plannedSlot, string equippedSlotName, GearItem desired, EquippedItemSnapshot current, CancellationToken token)
     {
-        var equippedSlot = GetEquippedSlot(slot);
+        var equippedSlot = GetEquippedSlot(equippedSlotName);
         if (GetEquippedItemId(equippedSlot) != desired.Id)
-            throw new InvalidOperationException($"{slot}: equipped item changed before melding. Nothing was changed for this item.");
+            throw new InvalidOperationException($"{plannedSlot}: equipped item changed before melding. Nothing was changed for this item.");
 
         var desiredMateria = GearPlan.DesiredMateria(desired);
         var preservedCount = GearPlan.PreservedMateriaCount(desired, current);
 
-        log.Information("Preparing {Slot}, item {ItemId}: preserving {PreservedCount} materia and replacing {MateriaCount} materia.", slot, desired.Id, preservedCount, desiredMateria.Count - preservedCount);
+        log.Information("Preparing {Slot} ({EquippedSlot}), item {ItemId}: preserving {PreservedCount} materia and replacing {MateriaCount} materia.", plannedSlot, equippedSlotName, desired.Id, preservedCount, desiredMateria.Count - preservedCount);
 
         if (GetMateriaCount(equippedSlot) > preservedCount)
             await RetrieveMateria(equippedSlot, preservedCount, token);
@@ -188,12 +191,12 @@ public sealed class MeldWorkflow : IMeldDriver
         {
             token.ThrowIfCancellationRequested();
             if (GetEquippedItemId(equippedSlot) != desired.Id)
-                throw new InvalidOperationException($"{slot}: equipped item changed during melding. Workflow stopped before further changes.");
+                throw new InvalidOperationException($"{plannedSlot}: equipped item changed during melding. Workflow stopped before further changes.");
 
             if (GetEquippedItemId(equippedSlot) != desired.Id)
-                throw new InvalidOperationException($"{slot}: equipped item changed after retrieval.");
+                throw new InvalidOperationException($"{plannedSlot}: equipped item changed after retrieval.");
 
-            await AttachMateria(GetEquippedSlot(slot), desiredMateria[index], token);
+            await AttachMateria(equippedSlot, desiredMateria[index], token);
         }
     }
 
