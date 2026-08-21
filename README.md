@@ -7,7 +7,7 @@ AutoMeld imports a xivgear materia plan and verifies it against your currently e
 1. Open `/xlsettings` in game.
 2. Open **Experimental** and add this custom repository:
 
-   `https://raw.githubusercontent.com/Rycko2/auto-meld/main/repo.json`
+   `https://raw.githubusercontent.com/Rycko2/AutoMeld/refs/heads/main/repo.json`
 
 3. Open `/xlplugins`, search for **AutoMeld**, and install it.
 4. Use the plugin's **Settings** button in `/xlplugins` to open the example configuration window.

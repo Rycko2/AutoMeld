@@ -63,9 +63,10 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           $link = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/latest.zip"
+          $repoVersion = if ($version.Split('.').Count -eq 3) { "$version.0" } else { $version }
           $repo = Get-Content repo.json -Raw | ConvertFrom-Json
           $entry = $repo[0]
-          $entry.AssemblyVersion = $version
+          $entry.AssemblyVersion = $repoVersion
           $entry.DownloadLinkInstall = $link
           $entry.DownloadLinkUpdate = $link
           $repo | ConvertTo-Json -Depth 10 -AsArray | Set-Content repo.json -Encoding UTF8
