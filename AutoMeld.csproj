@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>AutoMeld</AssemblyName>
     <RootNamespace>AutoMeld</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.3</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>CS1591</NoWarn>
   </PropertyGroup>
