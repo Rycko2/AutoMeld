@@ -79,7 +79,12 @@ Or provide an exact `MAJOR.MINOR.PATCH` version:
 ./bump-version.sh 0.3.0
 ```
 
-The script updates `AutoMeld.csproj`, `AutoMeld.json`, and `repo.json`. Commit the changes, push the commit, and create the matching `vVERSION` tag.
+The script uses the latest semantic `vVERSION` Git tag as the current version. It updates `AutoMeld.csproj`, `AutoMeld.json`, and `repo.json`, then creates the matching release commit and annotated `vVERSION` tag. Push both the commit and tag to trigger the release workflow:
+
+```bash
+git push origin main
+git push origin v0.3.0
+```
 
 ## Current Limitation
 

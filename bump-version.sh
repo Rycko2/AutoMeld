@@ -14,9 +14,9 @@ Usage:
     ./bump-version.sh --patch
 
 VERSION must be MAJOR.MINOR.PATCH, for example 0.3.0.
---major increments the major component of the version in AutoMeld.csproj and resets minor and patch to 0.
---minor increments the minor component of the version in AutoMeld.csproj and resets patch to 0.
---patch increments the patch component of the version in AutoMeld.csproj.
+--major increments the major component of the latest git tag and resets minor and patch to 0.
+--minor increments the minor component of the latest git tag and resets patch to 0.
+--patch increments the patch component of the latest git tag.
 EOF
 }
 
@@ -25,9 +25,21 @@ if [[ $# -ne 1 ]]; then
     exit 1
 fi
 
-current_version=$(sed -nE 's/.*<Version>([0-9]+\.[0-9]+\.[0-9]+)<\/Version>.*/\1/p' AutoMeld.csproj)
-if [[ -z "$current_version" ]]; then
-    echo "Could not read the current version from AutoMeld.csproj." >&2
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Working tree is not clean. Commit or stash existing changes before bumping the version." >&2
+    exit 1
+fi
+
+mapfile -t version_tags < <(git tag --list 'v[0-9]*' --sort=-version:refname)
+if [[ "${#version_tags[@]}" -eq 0 ]]; then
+    echo "Could not find a semantic version tag matching vMAJOR.MINOR.PATCH." >&2
+    exit 1
+fi
+
+current_tag=${version_tags[0]}
+current_version=${current_tag#v}
+if [[ ! "$current_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Latest tag '$current_tag' is not a MAJOR.MINOR.PATCH version." >&2
     exit 1
 fi
 
@@ -51,6 +63,17 @@ fi
 
 assembly_version="${version}.0"
 release_url="https://github.com/Rycko2/AutoMeld/releases/download/v${version}/latest.zip"
+tag="v${version}"
+
+if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+    echo "Tag ${tag} already exists locally." >&2
+    exit 1
+fi
+
+if git ls-remote --exit-code --refs origin "refs/tags/${tag}" >/dev/null 2>&1; then
+    echo "Tag ${tag} already exists on origin." >&2
+    exit 1
+fi
 
 replace_once() {
     local file=$1
@@ -79,3 +102,7 @@ python3 -m json.tool repo.json >/dev/null
 echo "Updated plugin version from ${current_version} to ${version}."
 echo "Updated release metadata to ${release_url}."
 git --no-pager diff -- AutoMeld.csproj AutoMeld.json repo.json
+git add AutoMeld.csproj AutoMeld.json repo.json
+git commit -m "Bump version to ${version}"
+git tag -a "${tag}" -m "Release ${tag}"
+echo "Created commit and annotated tag ${tag}."
