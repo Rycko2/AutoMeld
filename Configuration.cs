@@ -5,6 +5,7 @@ namespace AutoMeld;
 public sealed class Configuration
 {
     public bool ConfirmBeforeStarting { get; set; } = true;
+    public bool AllowPartialMelding { get; set; } = true;
 
     public static Configuration Load(string directory)
     {

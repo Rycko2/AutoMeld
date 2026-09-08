@@ -152,7 +152,7 @@ public static class GearPlan
 
         foreach (var slot in equippedItems.Keys)
         {
-            if (!matches.Values.Contains(slot))
+            if (!matches.Values.Contains(slot) && equippedItems[slot] != 0)
                 mismatches.Add(new GearMismatch(slot, null, equippedItems[slot]));
         }
 

@@ -10,7 +10,7 @@ namespace AutoMeld;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string Command = "/xlautomeld";
+    private const string Command = "/pautomeld";
     private readonly string configDirectory;
     private readonly Configuration configuration;
     private readonly IDalamudPluginInterface pluginInterface;
@@ -152,7 +152,9 @@ public sealed class Plugin : IDalamudPlugin
             ? FindMissingMateria(export, equippedItems)
             : null;
         status = !previewValidation.IsMatch
-            ? "Gear verification failed. No gear has been changed."
+            ? configuration.AllowPartialMelding
+                ? "Partial gear verification completed. Mismatched slots will be skipped."
+                : "Gear verification failed. No gear has been changed."
             : previewMateriaError is null
                 ? "Gear verification passed. No gear has been changed."
                 : previewMateriaError;
@@ -168,9 +170,11 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (previewValidation is null || !previewValidation.IsMatch)
+        if (previewValidation is null || (!configuration.AllowPartialMelding && !previewValidation.IsMatch))
         {
-            status = "Verify current gear successfully before starting.";
+            status = configuration.AllowPartialMelding
+                ? "Verify current gear successfully before starting."
+                : "Verify current gear successfully before starting, or enable partial melding in Settings.";
             log.Warning("Meld start refused because there is no successful current-gear preview.");
             return;
         }
@@ -187,7 +191,7 @@ public sealed class Plugin : IDalamudPlugin
             }
 
             var currentValidation = GearPlan.Validate(export, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
-            if (!currentValidation.IsMatch)
+            if (!configuration.AllowPartialMelding && !currentValidation.IsMatch)
             {
                 status = "Current gear no longer matches the plan. Verify again before starting.";
                 chat.PrintError($"[AutoMeld] {status}");
@@ -203,7 +207,7 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             }
 
-            workflow.Start(export, equippedItems);
+            workflow.Start(export, equippedItems, configuration.AllowPartialMelding);
             status = workflow.Status;
         }
         catch (InvalidOperationException exception)
@@ -276,12 +280,17 @@ public sealed class Plugin : IDalamudPlugin
         public override void Draw()
         {
             ImGui.Text("Paste a xivgear JSON export and review the planned changes.");
-            ImGui.InputTextMultiline("xivgear JSON", ref plugin.jsonText, 200000, new System.Numerics.Vector2(-1, 160));
-            if (ImGui.Button("Load pasted JSON")) plugin.Import();
+            if (ImGui.Button("Settings")) plugin.configWindow.IsOpen = true;
+            ImGui.SameLine();
+            if (ImGui.Button("Start automatic meld")) plugin.Start();
+            ImGui.SameLine();
+            if (ImGui.Button("Stop")) plugin.workflow.Stop();
+            if (ImGui.InputText("xivgear JSON", ref plugin.jsonText, 200000))
+                plugin.Import();
             if (plugin.export is not null)
             {
                 var changedSlots = plugin.previewEquippedItems is null
-                    ? new List<KeyValuePair<string, GearItem>>()
+                    ? []
                     : plugin.export.Items.Where(pair => plugin.NeedsMateriaChange(pair.Key, pair.Value)).ToList();
                 var changeCount = changedSlots.Sum(pair => GearPlan.DesiredMateria(pair.Value).Count);
                 ImGui.Separator();
@@ -304,7 +313,9 @@ public sealed class Plugin : IDalamudPlugin
 
                 if (plugin.previewValidation is { IsMatch: false } validation)
                 {
-                    ImGui.Text("Gear verification failed:");
+                    ImGui.Text(plugin.configuration.AllowPartialMelding
+                        ? "The following slots will be skipped:"
+                        : "Gear verification failed:");
                     foreach (var mismatch in validation.Mismatches)
                     {
                         ImGui.Text(mismatch.Slot);
@@ -322,9 +333,6 @@ public sealed class Plugin : IDalamudPlugin
                 if (plugin.previewMateriaError is not null)
                     ImGui.TextWrapped(plugin.previewMateriaError);
 
-                if (ImGui.Button("Start automatic meld")) plugin.Start();
-                ImGui.SameLine();
-                if (ImGui.Button("Stop")) plugin.workflow.Stop();
             }
 
             ImGui.Separator();
@@ -346,8 +354,6 @@ public sealed class Plugin : IDalamudPlugin
 
         public override void Draw()
         {
-            ImGui.TextWrapped("Example settings window. More workflow options can be added here later.");
-
             var confirmBeforeStarting = plugin.configuration.ConfirmBeforeStarting;
             if (ImGui.Checkbox("Confirm before starting", ref confirmBeforeStarting))
             {
@@ -356,6 +362,15 @@ public sealed class Plugin : IDalamudPlugin
             }
 
             ImGui.TextWrapped("This setting is reserved for the final confirmation dialog before automation begins.");
+
+            var allowPartialMelding = plugin.configuration.AllowPartialMelding;
+            if (ImGui.Checkbox("Allow partial melding", ref allowPartialMelding))
+            {
+                plugin.configuration.AllowPartialMelding = allowPartialMelding;
+                plugin.configuration.Save(plugin.configDirectory);
+            }
+
+            ImGui.TextWrapped("When enabled, mismatched or missing gear slots are skipped and matching slots are melded.");
         }
     }
 }

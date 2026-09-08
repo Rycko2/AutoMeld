@@ -15,7 +15,7 @@ public interface IMeldDriver
     bool IsReady { get; }
     bool IsRunning { get; }
     string Status { get; }
-    void Start(GearExport export, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems);
+    void Start(GearExport export, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems, bool allowPartialMelding);
     void Stop();
 }
 
@@ -44,6 +44,7 @@ public sealed class DalamudEquipmentReader : IEquipmentReader
         log.Debug("Reading equipped gear snapshot: {Count} equipped inventory entries.", equipped.Length);
 
         ReadSlot(items, equipped, "Weapon", 0);
+        ReadSlot(items, equipped, "OffHand", 1);
         ReadSlot(items, equipped, "Head", 2);
         ReadSlot(items, equipped, "Body", 3);
         ReadSlot(items, equipped, "Hand", 4);
@@ -104,13 +105,13 @@ public sealed class MeldWorkflow : IMeldDriver
     public bool IsRunning => cancellation is not null;
     public string Status { get; private set; } = "Ready.";
 
-    public void Start(GearExport export, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems)
+    public void Start(GearExport export, IReadOnlyDictionary<string, EquippedItemSnapshot> equippedItems, bool allowPartialMelding)
     {
         if (IsRunning)
             throw new InvalidOperationException("A meld workflow is already running.");
 
         var validation = GearPlan.Validate(export, equippedItems.ToDictionary(pair => pair.Key, pair => pair.Value.ItemId));
-        if (!validation.IsMatch)
+        if (!allowPartialMelding && !validation.IsMatch)
         {
             var details = string.Join("; ", validation.Mismatches.Select(mismatch => mismatch.ToString()));
             log.Warning("Meld workflow aborted before any changes because gear validation failed: {Details}", details);
@@ -282,6 +283,7 @@ public sealed class MeldWorkflow : IMeldDriver
         return slot switch
         {
             "Weapon" => 0u,
+            "OffHand" => 1u,
             "Head" => 2u,
             "Body" => 3u,
             "Hand" => 4u,

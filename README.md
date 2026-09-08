@@ -34,14 +34,14 @@ In FFXIV:
 3. Add `C:\scratch\automeld`, not the individual DLL.
 4. Reload Dalamud or restart the game.
 5. Open `/xlplugins` and check the development plugin list.
-6. Run `/xlautomeld` to open AutoMeld.
+6. Run `/pautomeld` to open AutoMeld.
 
 If the plugin does not appear, confirm that `AutoMeld.dll` and `AutoMeld.json` are in the same folder. Run `/xllog` and look for manifest, load, or dependency errors.
 
 ## Use In Game
 
 1. Copy the JSON text from a xivgear export.
-2. Run `/xlautomeld`.
+2. Run `/pautomeld`.
 3. Paste the export into **xivgear JSON**.
 4. Select **Load pasted JSON**. Gear verification runs automatically.
 5. Review the current and planned gear and materia summary.
