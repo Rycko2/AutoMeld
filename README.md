@@ -53,6 +53,34 @@ AutoMeld reads only currently equipped gear. It does not use the armory chest or
 
 Run `/xllog` to view AutoMeld logs, including import failures, equipped item IDs, validation mismatches, workflow stops, and unexpected errors.
 
+## Version Bumps
+
+Use the version script before creating a release tag:
+
+```bash
+./bump-version.sh --minor
+```
+
+For a major release:
+
+```bash
+./bump-version.sh --major
+```
+
+For a patch release:
+
+```bash
+./bump-version.sh --patch
+```
+
+Or provide an exact `MAJOR.MINOR.PATCH` version:
+
+```bash
+./bump-version.sh 0.3.0
+```
+
+The script updates `AutoMeld.csproj`, `AutoMeld.json`, and `repo.json`. Commit the changes, push the commit, and create the matching `vVERSION` tag.
+
 ## Current Limitation
 
 The automated driver uses the current FFXIV materia agent and must be tested carefully against the current game client. It removes existing materia from the selected equipped item, selects the requested materia, confirms the attach dialog, waits for completion, and rechecks the item before continuing. Stop immediately if `/xllog` reports an unexpected agent or dialog state.
